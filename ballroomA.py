@@ -19,6 +19,7 @@ gc = gspread.authorize(credentials)
 gdspreadsheet = gc.open("speakers-list")
 worksheet = gdspreadsheet.worksheet(ballroom)
 
+
 queue = multiprocessing.Queue()
 
 def start():
@@ -74,10 +75,19 @@ def updater():
     multiprocessing.Process(target=update, args=[stop]).start()
     return stop
 					
+
+
+
+def start():
+	updatepos()
+	updateneg()
+	updateneutral()
+
 def updatepos():
 	value = worksheet.acell('I2').value
 	newvalue = int(value) + 1
 	worksheet.update_acell('I2', '' + str(newvalue) + '')
+
 def updateneg():
 	value = worksheet.acell('G2').value
 	newvalue = int(value) + 1
