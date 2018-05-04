@@ -113,6 +113,4 @@ def updateneutral():
 	newvalue = int(value) + 1
 	worksheet.update_acell("""H""" + str(cell.row) + """ """, """ """ + str(newvalue) + """ """)
 
-
-
 start()
