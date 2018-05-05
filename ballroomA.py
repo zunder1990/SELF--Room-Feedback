@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 import gspread
+import json
 from oauth2client.service_account import ServiceAccountCredentials
-import RPi.GPIO as GPIO
+#import RPi.GPIO as GPIO
 import time
 import subprocess
 from datetime import datetime
@@ -10,28 +11,44 @@ import os
 import multiprocessing
 import Queue
 
-
-ballroom = "BallroomA"
-starttimes = ["8:00", "9:15", "13:00", "14:00", "04-27-10:26"]
-
-
-scope = ['https://spreadsheets.google.com/feeds',
+CONFIG_FILE = 'config.json'
+CREDENTIALS_FILE = 'self-video-zach-208096653289.json'
+SCOPE = ['https://spreadsheets.google.com/feeds',
          'https://www.googleapis.com/auth/drive']
-credentials = ServiceAccountCredentials.from_json_keyfile_name('self-video-zach-208096653289.json', scope)
-gc = gspread.authorize(credentials)
-gdspreadsheet = gc.open("speakers-list")
-worksheet = gdspreadsheet.worksheet(ballroom)
+SHEET_NAME = 'speakers-list'
+
+class FeedbackCollector:
+
+	'''
+	getConfig()
+
+	Reads the local config file (json format) from file system
+	'''
+	@staticmethod
+	def getConfig(filename):
+		with open(filename) as f:
+			return json.load(f)
+
+	def __init__(self):
+		self.config = self.getConfig(CONFIG_FILE)
+		self.credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, SCOPE)
+		self.gc = gspread.authorize(self.credentials)
+		self.gsheet = self.gc.open(SHEET_NAME)
+		self.worksheet = self.gsheet.worksheet(self.config['room_id'])
+		self.queue = multiprocessing.Queue()
+
+		print self.config
+		print self.worksheet
 
 
-queue = multiprocessing.Queue()
 
 def start():
 	stop_writing  = updater()
-	GPIO.setmode(GPIO.BCM)
+	#GPIO.setmode(GPIO.BCM)
 
-	GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-	GPIO.setup(13, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-	GPIO.setup(6, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+	#GPIO.setup(18, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+	#GPIO.setup(13, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+	#GPIO.setup(6, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 	try: input()
 	except KeyboardInterrupt: sys.exit()
 	finally:
@@ -61,17 +78,20 @@ def googlesheetlookup():
 
 def input():
 	while True:
-			input_state18 = GPIO.input(18)
-			input_state13 = GPIO.input(13)
-			input_state6 = GPIO.input(6)
-			if input_state18 == False:
-				vote = "pos"
-			if input_state13 == False:
-				vote = "neg"
-			if input_state6 == False:
-				vote = "neutral"
-			queue.put(vote)
-			time.sleep(1)#seconds
+		#input_state18 = GPIO.input(18)
+		#input_state13 = GPIO.input(13)
+		#input_state6 = GPIO.input(6)
+		input_state18 = True;
+		input_state13 = False;
+		input_state6 = False;
+		if input_state18 == False:
+			vote = "pos"
+		if input_state13 == False:
+			vote = "neg"
+		if input_state6 == False:
+			vote = "neutral"
+		queue.put(vote)
+		time.sleep(1)#seconds
 	
 def updater():
 	def update(stop):
@@ -113,4 +133,6 @@ def updateneutral():
 	newvalue = int(value) + 1
 	worksheet.update_acell("""H""" + str(cell.row) + """ """, """ """ + str(newvalue) + """ """)
 
-start()
+if __name__ == "__main__":
+	collector = FeedbackCollector()
+	start()
