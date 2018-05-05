@@ -1,6 +1,7 @@
 {
     "room_id": "BallroomA",
-    "start_times": [ "8:00", "9:15", "13:00", "14:00" ],
-    "_comment": "start_offset is number of minutes past start time to switch collector to next event",
-    "start_offset_for_votes": "15"
+    "schedule_sheet": "TEST_EVENT_SCHEDULE",
+    "session_length": "60",
+    "session_start_offset_min": "0",
+    "session_end_offset_min": "15"
 }

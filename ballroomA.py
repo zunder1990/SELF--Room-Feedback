@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import collections
 import gspread
 import logging
 import json
@@ -17,6 +18,8 @@ CREDENTIALS_FILE = 'self-video-zach-208096653289.json'
 SCOPE = ['https://spreadsheets.google.com/feeds',
          'https://www.googleapis.com/auth/drive']
 SHEET_NAME = 'speakers-list'
+
+Event = collections.namedtuple('Event', 'id room date time')
 
 class FeedbackCollector:
 	'''FeedbackCollector handles collection of GPIO events and sending them to queue.
@@ -47,17 +50,36 @@ class FeedbackCollector:
 		with open(filename) as f:
 			return json.load(f)
 
-	def getEventSchedule(self):
-		'''Look up the current event schedule
+	def buildSchedule(self, logger):
+		'''Builds/Updates the Event Schedule for this particular device based on the room from
+		the device config.
 
 		Args:
 			none
 
 		Returns:
-			Current event schedule
+			(list of Event tuples) Current room schedule
 		'''
-		return self.worksheet.get()
 
+		def validateSchedule(list s, logger):
+			cnt = count(s)
+			if cnt le 1:
+				logger.debug('Room schedule validates - 1 or fewer events!')
+			else:
+				for i = 0:
+
+		gSchedule = self.gsheet.worksheet(self.config['schedule_sheet']).get_all_records()
+
+		schedule = []
+		for row in gSchedule:
+			event = Event(id=row['EventID'], room=row['Room'], date=row['Date'], time=row['startTime'])
+			print( event.room + ' vs ' + self.config['room_id'])
+			if( event.room == self.config['room_id']):
+				schedule.append(event)
+
+		validateSchedule(schedule)
+
+		return schedule
 
 	def __init__(self, queue):
 		'''Instantiate new FeedbackCollector Object
@@ -72,7 +94,7 @@ class FeedbackCollector:
 		self.worksheet = self.gsheet.worksheet(self.config['room_id'])
 		self.queue = queue
 
-		self.roomSchedule = self.getRoomSchedule()
+		self.roomSchedule = self.buildSchedule()
 		
 		currenttime = datetime.now().strftime('%m_%d_%H_%M_%S')
 		self.voteLogFile = "%s_feedback.log" % str(currenttime)
