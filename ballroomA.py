@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import gspread
+import logging
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 #import RPi.GPIO as GPIO
@@ -18,31 +19,77 @@ SCOPE = ['https://spreadsheets.google.com/feeds',
 SHEET_NAME = 'speakers-list'
 
 class FeedbackCollector:
+	'''FeedbackCollector handles collection of GPIO events and sending them to queue.
+
+	Args: 
+		queue: Multiprocessing queue where output is placed.
+
+	Attributes:
+		config (dict): Configuration parameters loaded from external config file.
+		credentials: Google account credentials as created from external credentials file.
+		currentEvent: Current event id being logged.
+		gc: Google connection created using credentials
+		gsheet: The Google Sheet being used
+		worksheet: The page (sheet/tab within the gsheet) being used.
 
 	'''
-	getConfig()
 
-	Reads the local config file (json format) from file system
-	'''
 	@staticmethod
 	def getConfig(filename):
+		'''Reads the local config file (json format) from file system
+
+		Args:
+			filename: Filename of external json file with configuration.
+
+		Returns:
+			dict representation of the json config file.	
+		'''
 		with open(filename) as f:
 			return json.load(f)
 
-	def __init__(self):
+	def getEventSchedule(self):
+		'''Look up the current event schedule
+
+		Args:
+			none
+
+		Returns:
+			Current event schedule
+		'''
+		return self.worksheet.get()
+
+
+	def __init__(self, queue):
+		'''Instantiate new FeedbackCollector Object
+
+		Args:
+			queue: Multiprocessing queue object to be loaded with collected feedback.
+		'''
 		self.config = self.getConfig(CONFIG_FILE)
 		self.credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, SCOPE)
 		self.gc = gspread.authorize(self.credentials)
 		self.gsheet = self.gc.open(SHEET_NAME)
 		self.worksheet = self.gsheet.worksheet(self.config['room_id'])
-		self.queue = multiprocessing.Queue()
+		self.queue = queue
 
-		print self.config
-		print self.worksheet
+		self.roomSchedule = self.getRoomSchedule()
+		
+		currenttime = datetime.now().strftime('%m_%d_%H_%M_%S')
+		self.voteLogFile = "%s_feedback.log" % str(currenttime)
+
+	def __repr__(self):
+		# Overly verbose __repr__ because we may be headless and relying on log for debug
+		myRepr = "FeatureCollector Object \n"
+		myRepr += " .config = %s\n" % self.config
+		myRepr += " .gsheet = %s\n" % self.gsheet
+		myRepr += " .worksheet = %s\n" % self.worksheet
+		myRepr += " .voteLogFile = %s" % self.voteLogFile
+
+		return myRepr
 
 
-
-def start():
+def start(fc, logger):
+	logger.info('Entered start() function')
 	stop_writing  = updater()
 	#GPIO.setmode(GPIO.BCM)
 
@@ -134,5 +181,21 @@ def updateneutral():
 	worksheet.update_acell("""H""" + str(cell.row) + """ """, """ """ + str(newvalue) + """ """)
 
 if __name__ == "__main__":
-	collector = FeedbackCollector()
-	start()
+	# Set up for a file log, since this will be headless
+	logging.basicConfig(level=logging.DEBUG,
+		format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+        datefmt='%m-%d %H:%M',
+        filename='debug.log',
+        filemode='w')
+	logger = logging.getLogger('main')
+	logger.info('START FeedbackCollector script')
+
+	# Set up Multiprocessing queue to share
+	queue = multiprocessing.Queue()
+
+	# Instantiate our collector and updater objects
+	collector = FeedbackCollector(queue)
+	logger.info('FeedbackCollector object instantiated.')
+	logger.debug('FeedbackCollector: %s' % str(collector))
+
+	start(collector, logger)
