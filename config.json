@@ -1,7 +1,7 @@
 {
     "room_id": "BallroomA",
     "schedule_sheet": "TEST_EVENT_SCHEDULE",
-    "session_length": "60",
+    "session_length_min": "60",
     "session_start_offset_min": "0",
     "session_end_offset_min": "15"
 }
