@@ -1,0 +1,20 @@
+05-06 10:38 main         INFO     START FeedbackCollector script
+05-06 10:38 oauth2client.crypt DEBUG    ['eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjRlOTM1NGVhNzA3YzA2MjkyYjM5Zjk2OTc2YjZkMTY3Y2VkYTZkYjIifQ', 'eyJpc3MiOiJzZWxmLXZkZW8temFjaEBzZWxmLXZpZGVvLXphY2guaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJzY29wZSI6Imh0dHBzOi8vc3ByZWFkc2hlZXRzLmdvb2dsZS5jb20vZmVlZHMgaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vYXV0aC9kcml2ZSIsImF1ZCI6Imh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbS9vL29hdXRoMi90b2tlbiIsImV4cCI6MTUyNTYzMTg4NiwiaWF0IjoxNTI1NjI4Mjg2fQ', 'Zx7suDxi0CmQr7joe0SD13UP1Mgh-8tGQJqgqavIND6gkIoSAx1lq3qHZWVRMdgSK1T0gsXlV1JjDIyF9JjzWdOMsEwSC5BlwMuvGRJ-0bXQFFG9-SAH0NplxtMzgKhBHa64Rg3emYQ1yaRfuQrBPG27iOijCCw-i3dTDYIZ_dGfgiQfFsS0cmyPnjiJv_fuXsnl14mQdhx2dKk06Y9O0LSUR2hKjqaqFwEWMyhdmlvzdoEH3xz0FyHkBkQej2jkx1urRs4zEZ5GElul15MjSEdks2LLHKiLEYSRFDk9bqYZug7Pnot-MIhoTraP4a7dFyVHJBxulzolA6f00e7A3g']
+05-06 10:38 oauth2client.client INFO     Refreshing access_token
+05-06 10:38 urllib3.connectionpool DEBUG    Starting new HTTPS connection (1): www.googleapis.com
+05-06 10:38 urllib3.connectionpool DEBUG    https://www.googleapis.com:443 "GET /drive/v3/files?q=mimeType%3D%27application%2Fvnd.google-apps.spreadsheet%27&includeTeamDriveItems=True&supportsTeamDrives=True&pageSize=1000 HTTP/1.1" 200 None
+05-06 10:38 urllib3.connectionpool DEBUG    Starting new HTTPS connection (1): sheets.googleapis.com
+05-06 10:38 urllib3.connectionpool DEBUG    https://sheets.googleapis.com:443 "GET /v4/spreadsheets/1nbQcsRYyfRlz9euG16Tgk09cgUCA2LAZ-tdaNWovPII?includeGridData=false HTTP/1.1" 200 None
+05-06 10:38 urllib3.connectionpool DEBUG    https://sheets.googleapis.com:443 "GET /v4/spreadsheets/1nbQcsRYyfRlz9euG16Tgk09cgUCA2LAZ-tdaNWovPII?includeGridData=false HTTP/1.1" 200 None
+05-06 10:38 urllib3.connectionpool DEBUG    https://sheets.googleapis.com:443 "GET /v4/spreadsheets/1nbQcsRYyfRlz9euG16Tgk09cgUCA2LAZ-tdaNWovPII/values/TEST_EVENT_SCHEDULE HTTP/1.1" 200 None
+05-06 10:38 main         DEBUG    Adding event to schedule: id BallroomA in BallroomA on 6-9 @ 13:30
+05-06 10:38 main         DEBUG    Adding event to schedule: id BallroomA in BallroomA on 6-10 @ 9:00
+05-06 10:38 main         DEBUG    Validating 2 events in room's schedule.
+05-06 10:38 main         INFO     Successfully validated 2 events for roomID: 'BallroomA' schedule.
+05-06 10:38 main         INFO     FeedbackCollector object instantiated.
+05-06 10:38 main         DEBUG    FeedbackCollector: FeatureCollector Object 
+ .config = {u'session_length_min': u'60', u'session_start_offset_min': u'0', u'session_end_offset_min': u'15', u'room_id': u'BallroomA', u'schedule_sheet': u'TEST_EVENT_SCHEDULE'}
+ .gsheet = <Spreadsheet u'speakers-list' id:1nbQcsRYyfRlz9euG16Tgk09cgUCA2LAZ-tdaNWovPII>
+ .worksheet = <Worksheet u'BallroomA' id:2055863885>
+ .voteLogFile = 05_06_10_38_08_feedback.log
+05-06 10:38 main         INFO     Entered start() function

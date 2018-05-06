@@ -1,0 +1,1 @@
+{"event_0": ["BallroomA", "BallroomA", "6-9", "13:30"], "configuration": {"session_length_min": "60", "session_start_offset_min": "0", "session_end_offset_min": "15", "room_id": "BallroomA", "schedule_sheet": "TEST_EVENT_SCHEDULE"}, "event_1": ["BallroomA", "BallroomA", "6-10", "9:00"]}
