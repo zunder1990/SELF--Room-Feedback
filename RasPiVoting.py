@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env pythoni
+from ast import literal_eval
 import collections
 import gspread
 import logging
@@ -77,12 +78,12 @@ class FeedbackCollector:
 
 		schedule = []
 		for row in gSchedule:
-			event = Event(id=row[SHEET_COL_HDG_EVENT_ROOM], 
+			event = Event(id=row[SHEET_COL_HDG_EVENT_ID], 
 				room=row[SHEET_COL_HDG_EVENT_ROOM], 
 				date=row[SHEET_COL_HDG_EVENT_DATE], 
 				time=row[SHEET_COL_HDG_EVENT_TIME])
-			print( event.room + ' vs ' + self.config['room_id'])
 			if( event.room == self.config['room_id']):
+				# Found event that matches with this device's configuration, add to schedule
 				logger.debug('''Adding event to schedule: id {0} in {1} on {2} @ {3}'''
 					.format(event.id, event.room, event.date, event.time))
 				schedule.append(event)
@@ -106,6 +107,9 @@ class FeedbackCollector:
 			logger.debug('Validating {0} events in room\'s schedule.'.format(cnt))
 		else:
 			logger.error('Event schedule is empty.')
+
+			#TODO: Retrieve the schedule_cache.json an use that if we can't get online schedule
+
 			return
 
 		for i in xrange(0, cnt-1):
@@ -124,8 +128,15 @@ class FeedbackCollector:
 		#Only save a copy of the local schedule to file system if it validated.
 		schedule = {}
 		schedule['configuration'] = self.config
+		event_ids, rooms, dates, times = [], [], [], []
 		for i in range(len(self.roomSchedule)):
-			schedule['event_{0}'.format(i)] = self.roomSchedule[i]
+			event_ids.append(self.roomSchedule[i].id)
+			rooms.append(self.roomSchedule[i].room)
+			dates.append(self.roomSchedule[i].date)
+			times.append(self.roomSchedule[i].time)
+		events = [{'id': i, 'room': r, 'date': d, 'time':t} for i,r,d,t in zip(event_ids,
+			rooms, dates, times)]
+		schedule['events'] = json.dumps(literal_eval(str(events)))
 		with open(LOCAL_SCHEDULE_CACHE_FILE, 'w') as f_out:
 			json.dump(schedule, f_out)
 
@@ -177,16 +188,7 @@ def start(fc, logger):
 		#GPIO.output(13,GPIO.LOW)
 		#GPIO.output(18,GPIO.LOW)
 	#vote = "pos"
-	#updater(vote)
-
-def checklist():
-		currenttime = datetime.now().strftime('%m-%d-%H:%M')
-		print("time now = {0}").format(currenttime)
-		if currenttime in starttimes:
-			print("current time in list = {0}").format(currenttime)
-			googlesheetlookup() 
-			exit
-	
+	#updater(vote)	
 
 def googlesheetlookup():
 	currenttime = datetime.now().strftime('%m-%d-%H:%M')
