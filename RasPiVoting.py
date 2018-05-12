@@ -98,53 +98,85 @@ class FeedbackCollector:
 
 		Note: Validation fails/passes silently. Only logs the details.
 
+		Note 2: In the event of failed validation of Google Sheet schedule, 
+		will attempt to load schedule from schedule_cache.json in local filesystem.
+
 		Args:
 			s: (list) Room scheduled event list
 			logger: (logger) The logger to write results to
 		'''
 		cnt = len(self.roomSchedule)
+		loadFromCache = False
 		if(cnt):
 			logger.debug('Validating {0} events in room\'s schedule.'.format(cnt))
-		else:
-			logger.error('Event schedule is empty.')
-
-			#TODO: Retrieve the schedule_cache.json an use that if we can't get online schedule
-
-			return
-
-		for i in xrange(0, cnt-1):
-			e1 = self.roomSchedule[i]  # The event being validated in the schedule
-			for j in xrange(i+1, cnt):
-				e2 = self.roomSchedule[j] # Some other event in the schedule
+			for i in xrange(0, cnt-1):
+				e1 = self.roomSchedule[i]  # The event being validated in the schedule
+				for j in xrange(i+1, cnt):
+					e2 = self.roomSchedule[j] # Some other event in the schedule
 					
-				if e1.date == e2.date and e1.time == e2.time:
-					logger.error('''Event schedule FAILS VAILIDATION. Duplicate 
-						date or time found in schedule.''')
-					return 
-			
-		logger.info('Successfully validated {0} events for roomID: \'{1}\' schedule.'
-			.format(cnt, self.config['room_id']))
+					if e1.date == e2.date and e1.time == e2.time:
+						logger.degug('''Event schedule FAILS VAILIDATION. Duplicate 
+							date or time found in schedule.''')
+						loadFromCache = True
+		else:
+			logger.debug('Event schedule is empty.')
+			loadFromCache = True
+
+		if not loadFromCache:	
+			logger.info('Successfully validated {0} events for roomID: \'{1}\' schedule.'
+				.format(cnt, self.config['room_id']))
+
+			# Had successful validation, update any cached copy with this one.	
+			logger.debug('Caching copy of validated schedule to local filesystem.')
+			schedule = {}
+			schedule['configuration'] = self.config
+			event_ids, rooms, dates, times = [], [], [], []
+			for i in range(len(self.roomSchedule)):
+				event_ids.append(self.roomSchedule[i].id)
+				rooms.append(self.roomSchedule[i].room)
+				dates.append(self.roomSchedule[i].date)
+				times.append(self.roomSchedule[i].time)
+			events = [{'id': i, 'room': r, 'date': d, 'time':t} for i,r,d,t in 
+				zip(event_ids, rooms, dates, times)]
+			schedule['events'] = json.dumps(literal_eval(str(events)))
+			with open(LOCAL_SCHEDULE_CACHE_FILE, 'w') as f_out:
+				json.dump(schedule, f_out)
+			return
 		
-		#Only save a copy of the local schedule to file system if it validated.
-		schedule = {}
-		schedule['configuration'] = self.config
-		event_ids, rooms, dates, times = [], [], [], []
-		for i in range(len(self.roomSchedule)):
-			event_ids.append(self.roomSchedule[i].id)
-			rooms.append(self.roomSchedule[i].room)
-			dates.append(self.roomSchedule[i].date)
-			times.append(self.roomSchedule[i].time)
-		events = [{'id': i, 'room': r, 'date': d, 'time':t} for i,r,d,t in zip(event_ids,
-			rooms, dates, times)]
-		schedule['events'] = json.dumps(literal_eval(str(events)))
-		with open(LOCAL_SCHEDULE_CACHE_FILE, 'w') as f_out:
-			json.dump(schedule, f_out)
+		# If here, need to try to read cached copy of schedule from file system
+		# Assumes that any schedule that got saved previously must have passed
+		# validation to get there in the first place.
+		logger.debug("Updating roomSchedule with cached schedule from file system.")	
+		logger.debug("(local schedule_cache.json assumed to be good.)")
+		with open(LOCAL_SCHEDULE_CACHE_FILE, 'r') as f_in:
+				self.roomSchedule = json.load(f_in)
+				# TODO: This could still stand additional robustness, but think it 
+				# is good enough for now.
+
+	def collectFeedback(self, queue, logger):
+		'''Perform the feedback collection activity.
+
+		Note: Once started, loops infinitely doing the following:
+		 * Based on current time, decide what event we are logging
+		 * Listen for GPIO / Button input
+		 * When button press is detected, write a new vote to the queue.
+		'''
+		logger.info('FeedbackCollector.collectFeedback() loop started.')
+		while True:
+			# Lookup what event in schedule
+
+			# Simulate Feedback as crude testing
+			if self.config['simulate_voting'] is True:
+				logger.debug('Simulating random voting input for testing.')
+			# Collect feedback here
+
 
 	def __init__(self, queue, logger):
 		'''Instantiate new FeedbackCollector Object
 
 		Args:
 			queue: Multiprocessing queue object to be loaded with collected feedback.
+			logger: logging object from main - probably not best way to do this, but it works.
 		'''
 		self.config = self.getConfig(CONFIG_FILE)
 		self.credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, SCOPE)
@@ -164,10 +196,11 @@ class FeedbackCollector:
 	def __repr__(self):
 		# Overly verbose __repr__ because we may be headless and relying on log for debug
 		myRepr = "FeatureCollector Object \n"
-		myRepr += " .config = %s\n" % self.config
-		myRepr += " .gsheet = %s\n" % self.gsheet
-		myRepr += " .worksheet = %s\n" % self.worksheet
-		myRepr += " .voteLogFile = %s" % self.voteLogFile
+		myRepr += " .config = {0}\n".format(self.config)
+		myRepr += " .gsheet = {0}\n".format(self.gsheet)
+		myRepr += " .worksheet = {0}\n".format(self.worksheet)
+		myRepr += " .voteLogFile = {0}\n".format(self.voteLogFile)
+		myRepr += " .roomSchedule = {0}\n".format(self.roomSchedule)
 
 		return myRepr
 
