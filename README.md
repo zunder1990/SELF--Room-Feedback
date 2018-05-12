@@ -11,3 +11,6 @@ The config.json file options are:
 * session_length_min: (minutes) Planned length of sessions. Used to compute the window of time the votes for a particular session are collected.
 * session_start_offset_min: (minutes) How long the scheduled session start time to begin accepting votes / feedback.
 * session_end_offset_min: (minutes) How long past the scheduled sessio end time to stop accepting votes / feedback.
+* simulate_voting: (boolean) Simulate voting as simple test of Google Sheet connection and local vote log.
+* simulate_date: (MM-DD string) Date to simulate
+* simulate_time_start: (HH:MM string): Simulation start time. Similation will add to this time at a rate of 10 simulated minutes to 1 physical minute.
