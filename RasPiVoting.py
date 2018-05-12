@@ -162,12 +162,32 @@ class FeedbackCollector:
 		 * When button press is detected, write a new vote to the queue.
 		'''
 		logger.info('FeedbackCollector.collectFeedback() loop started.')
+		start_datetime = datetime.now()
+		if self.config['simulate_voting'] == 'True':
+			# initialize simulated voting time
+			sim_year = int(start_datetime.year)
+			sim_month = int(self.config['simulate_date'][0:2])
+			sim_day = int(self.config['simulate_date'][3:5])
+			sim_hour = int(self.config['simulate_time_start'][0:2])
+			sim_min = int(self.config['simulate_time_start'][3:5])
+			sim_datetime = datetime(sim_year, sim_month, sim_day, sim_hour, sim_min)
+			logger.info('SIMULATED FEEDBACK option running (see config file)')
+			logger.info('year: {0} month: {1} day: {2} hour: {3} min: {4}'.format(sim_year,
+				sim_month, sim_day, sim_hour, sim_min))
+			logger.info('Simulated start time set to: {0}'.format(sim_datetime))
+
 		while True:
+			cur_datetime = datetime.now()
+			# Simulate Feedback as crude testing
+			if self.config['simulate_voting'] == 'True':
+
+				delta = (cur_datetime - start_datetime) * 10
+				
+
+
+
 			# Lookup what event in schedule
 
-			# Simulate Feedback as crude testing
-			if self.config['simulate_voting'] is True:
-				logger.debug('Simulating random voting input for testing.')
 			# Collect feedback here
 
 
@@ -306,4 +326,4 @@ if __name__ == "__main__":
 	logger.info('FeedbackCollector object instantiated.')
 	logger.debug('FeedbackCollector: %s' % str(collector))
 
-	start(collector, logger)
+	collector.collectFeedback(queue, logger)
