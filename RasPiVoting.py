@@ -1,5 +1,6 @@
 #!/usr/bin/env pythoni
 from ast import literal_eval
+import csv
 import collections
 import gspread
 import logging
@@ -228,17 +229,13 @@ class FeedbackCollector:
 
 		# Results of schedule validation will be written to log only
 		self.validateSchedule(logger)
-		
-		currenttime = datetime.now().strftime('%m_%d_%H_%M_%S')
-		self.voteLogFile = "%s_feedback.log" % str(currenttime)
-
+	
 	def __repr__(self):
 		# Overly verbose __repr__ because we may be headless and relying on log for debug
 		myRepr = "FeatureCollector Object \n"
 		myRepr += " .config = {0}\n".format(self.config)
 		myRepr += " .gsheet = {0}\n".format(self.gsheet)
 		myRepr += " .worksheet = {0}\n".format(self.worksheet)
-		myRepr += " .voteLogFile = {0}\n".format(self.voteLogFile)
 		myRepr += " .roomSchedule = {0}\n".format(self.roomSchedule)
 
 		return myRepr
@@ -259,6 +256,12 @@ class FeedbackWriter:
 			
 			self.logger.info('FeedbackWriter read feedback from queue:\n{0}'.format(feedback_list))
 
+			# Write (append) to local daily vote log
+			with open(self.feedbackLogFile, 'a+') as f_out:
+				writer = csv.writer(f_out, delimiter=',')
+				for r in feedback_list:	
+					# Need to get the event / lookup
+					writer.writerow( [r['Timestamp'], 'EventFoo', r['Room'], r['Vote']] )
 
 
 	def __init__(self, queue, logger):
@@ -268,8 +271,32 @@ class FeedbackWriter:
 			queue: Multiprocessing queue object that we need to write the feedback from.
 			logger: logging object from main - probably a better way to do this, but it works.
 		'''
+		self.credentials = ServiceAccountCredentials.from_json_keyfile_name(CREDENTIALS_FILE, SCOPE)
+		self.gc = gspread.authorize(self.credentials)
+		self.gsheet = self.gc.open(SHEET_NAME)
 		self.queue = queue
 		self.logger = logger
+
+		# Log file for each day - will be appended to throughout.
+		currenttime = datetime.now().strftime('%m_%d')
+		self.feedbackLogFile = "%s_feedback.csv" % str(currenttime)
+		
+		# see if the day's feedback log file exists, if not - create now and add heading row
+		if not os.path.exists(self.feedbackLogFile):
+			with open(self.feedbackLogFile, 'w') as f_out:
+				writer = csv.writer(f_out, delimiter=',')
+				writer.writerow(['Timestamp', 'EventID', 'Room', 'Feedback'])
+				
+
+	def __repr__(self):
+		# Overly verbose __repr__ because we may be headless and relying on log for debug
+		myRepr = "FeedbackWriter Object \n"
+		myRepr += " .config = {0}\n".format(self.config)
+		myRepr += " .gsheet = {0}\n".format(self.gsheet)
+		myRepr += " .worksheet = {0}\n".format(self.worksheet)
+		myRepr += " .feedbackLogFile = {0}\n".format(self.feedbackLogFile)
+
+		return myRepr
 
 def start(fc, logger):
 	logger.info('Entered start() function')
