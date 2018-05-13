@@ -250,8 +250,8 @@ class FeedbackWriter:
 
 	def writeFeedback(self):
 		self.logger.info('FeedbackWriter.writeFeedback() loop started')
-		feedback_list = []
 		while True:
+			feedback_list = []
 			time.sleep(5) # Do processing once every 5 seconds - No need to go wide open.
 
 			while self.queue.qsize() != 0:
