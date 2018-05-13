@@ -6,12 +6,13 @@ import logging
 import json
 from oauth2client.service_account import ServiceAccountCredentials
 #import RPi.GPIO as GPIO
+import random
 import time
 import subprocess
 from datetime import datetime
 import sys
 import os
-import multiprocessing
+import multiprocessing 
 import Queue
 
 CONFIG_FILE = 'config.json'
@@ -136,7 +137,8 @@ class FeedbackCollector:
 				rooms.append(self.roomSchedule[i].room)
 				dates.append(self.roomSchedule[i].date)
 				times.append(self.roomSchedule[i].time)
-			events = [{'id': i, 'room': r, 'date': d, 'time':t} for i,r,d,t in 
+			events = [{SHEET_COL_HDG_EVENT_ID: i, SHEET_COL_HDG_EVENT_ROOM: r,
+				SHEET_COL_HDG_EVENT_DATE: d, SHEET_COL_HDG_EVENT_TIME:t} for i,r,d,t in 
 				zip(event_ids, rooms, dates, times)]
 			schedule['events'] = json.dumps(literal_eval(str(events)))
 			with open(LOCAL_SCHEDULE_CACHE_FILE, 'w') as f_out:
@@ -153,7 +155,7 @@ class FeedbackCollector:
 				# TODO: This could still stand additional robustness, but think it 
 				# is good enough for now.
 
-	def collectFeedback(self, queue, logger):
+	def collectFeedback(self):
 		'''Perform the feedback collection activity.
 
 		Note: Once started, loops infinitely doing the following:
@@ -161,7 +163,7 @@ class FeedbackCollector:
 		 * Listen for GPIO / Button input
 		 * When button press is detected, write a new vote to the queue.
 		'''
-		logger.info('FeedbackCollector.collectFeedback() loop started.')
+		self.logger.info('FeedbackCollector.collectFeedback() loop started.')
 		start_datetime = datetime.now()
 		if self.config['simulate_voting'] == 'True':
 			# initialize simulated voting time
@@ -171,17 +173,33 @@ class FeedbackCollector:
 			sim_hour = int(self.config['simulate_time_start'][0:2])
 			sim_min = int(self.config['simulate_time_start'][3:5])
 			sim_datetime = datetime(sim_year, sim_month, sim_day, sim_hour, sim_min)
-			logger.info('SIMULATED FEEDBACK option running (see config file)')
-			logger.info('year: {0} month: {1} day: {2} hour: {3} min: {4}'.format(sim_year,
+			self.logger.info('SIMULATED FEEDBACK option running (see config file)')
+			self.logger.info('year: {0} month: {1} day: {2} hour: {3} min: {4}'.format(sim_year,
 				sim_month, sim_day, sim_hour, sim_min))
-			logger.info('Simulated start time set to: {0}'.format(sim_datetime))
+			self.logger.info('Simulated start time set to: {0}'.format(sim_datetime))
+
+			vote_options = ['Positive', 'Negative', 'Neutral']
 
 		while True:
 			cur_datetime = datetime.now()
-			# Simulate Feedback as crude testing
 			if self.config['simulate_voting'] == 'True':
+				# Simulate Feedback as crude testing
+				delta = (cur_datetime - start_datetime)
+				if delta.seconds >= 3:
+					# Simulator will make a random vote every 3 seconds
+					# Update start_datetime to current time
+					start_datetime = cur_datetime
+					vote = random.choice(vote_options)
+					record = {}
+					record[SHEET_COL_HDG_EVENT_ROOM] = self.config['room_id']
+					record['Timestamp'] = str(cur_datetime)
+					record['Vote'] = vote
 
-				delta = (cur_datetime - start_datetime) * 10
+					# Add the record to the multiprocessing queue for the feedback writer
+					self.logger.info("SIMULATION: collected feedback record: \n{0}".format(record))
+					self.queue.put(record)
+					self.logger.info("SIMULATION: wrote feedback record to queue.")
+
 				
 
 
@@ -204,6 +222,7 @@ class FeedbackCollector:
 		self.gsheet = self.gc.open(SHEET_NAME)
 		self.worksheet = self.gsheet.worksheet(self.config['room_id'])
 		self.queue = queue
+		self.logger = logger
 
 		self.roomSchedule = self.buildSchedule(logger)
 
@@ -224,6 +243,33 @@ class FeedbackCollector:
 
 		return myRepr
 
+class FeedbackWriter:
+	'''FeebackWriter object is responsible for updating vote tallies and writing to 
+	local file and Google Sheets.
+	'''
+
+	def writeFeedback(self):
+		self.logger.info('FeedbackWriter.writeFeedback() loop started')
+		feedback_list = []
+		while True:
+			time.sleep(5) # Do processing once every 5 seconds - No need to go wide open.
+
+			while self.queue.qsize() != 0:
+				feedback_list.append(self.queue.get())
+			
+			self.logger.info('FeedbackWriter read feedback from queue:\n{0}'.format(feedback_list))
+
+
+
+	def __init__(self, queue, logger):
+		'''Instantiate new FeedbackWriter Object
+
+		Args:
+			queue: Multiprocessing queue object that we need to write the feedback from.
+			logger: logging object from main - probably a better way to do this, but it works.
+		'''
+		self.queue = queue
+		self.logger = logger
 
 def start(fc, logger):
 	logger.info('Entered start() function')
@@ -321,9 +367,21 @@ if __name__ == "__main__":
 	# Set up Multiprocessing queue to share
 	queue = multiprocessing.Queue()
 
-	# Instantiate our collector and updater objects
+	# Instantiate our collector
 	collector = FeedbackCollector(queue, logger)
 	logger.info('FeedbackCollector object instantiated.')
 	logger.debug('FeedbackCollector: %s' % str(collector))
 
-	collector.collectFeedback(queue, logger)
+	#Instantiate our writer
+	writer = FeedbackWriter(queue, logger)
+	logger.info('FeedbackWriter object instantiated.')
+
+	collectorProcess = multiprocessing.Process(target=collector.collectFeedback)
+	collectorProcess.start()
+	writerProcess = multiprocessing.Process(target=writer.writeFeedback)
+	writerProcess.start()
+
+
+	collectorProcess.join()
+	writerProcess.join()
+
