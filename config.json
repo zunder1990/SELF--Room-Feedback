@@ -6,6 +6,5 @@
     "session_start_offset_min": "0",
     "session_end_offset_min": "15",
     "simulate_voting": "True",
-    "simulate_date": "06-09",
-    "simulate_time_start": "13:30"
+    "update_gsheet_seconds": "60"
 }
