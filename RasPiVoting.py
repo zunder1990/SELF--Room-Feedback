@@ -6,11 +6,11 @@ import gspread
 import logging
 import json
 from oauth2client.service_account import ServiceAccountCredentials
-#import RPi.GPIO as GPIO
+# import RPi.GPIO as GPIO            # Uncomment when on Pi
 import random
 import time
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 import sys
 import os
 import multiprocessing 
@@ -25,17 +25,27 @@ SCOPE = ['https://spreadsheets.google.com/feeds',
 
 # Define how the Google sheet is set up
 SHEET_NAME = 'speakers-list'
-SHEET_COL_HDG_EVENT_ID = 'EventID'
+SHEET_COL_HDG_EVENT_ID = 'TalkID'
 SHEET_COL_HDG_EVENT_ROOM = 'Room'
 SHEET_COL_HDG_EVENT_DATE = 'Date'
 SHEET_COL_HDG_EVENT_TIME = 'startTime'
+SHEET_COL_POS_VOTE = 'H'
+SHEET_COL_NEG_VOTE = 'I'
+SHEET_COL_NEUTRAL_VOTE = 'J'
 
-PIN_18_FEEDBACK = 'Positive'
-PIN_13_FEEDBACK = 'Negative'
-PIN_6_FEEDBACK = 'Neutral'
+POSITIVE_VOTE = 'Positive'
+NEGATIVE_VOTE = 'Negative'
+NEUTRAL_VOTE = 'Neutral'
 
-Event = collections.namedtuple('Event', 'id room date time')
-vote_options = [PIN_18_FEEDBACK, PIN_13_FEEDBACK, PIN_6_FEEDBACK]
+POSITIVE_PIN = 19   # Zach to verify
+NEGATIVE_PIN = 13   # Zach to verify
+NEUTRAL_PIN = 6     # Zach to verify
+
+SESSION_MIN = 90    # Zach to verify - 90 min sessions
+BREAK_MIN = 15      # Zach to verify - 15 min breaks between
+
+Event = collections.namedtuple('Event', 'id room start_datetime end_datetime')
+vote_options = [POSITIVE_VOTE, NEGATIVE_VOTE, NEUTRAL_VOTE]
 
 class FeedbackCollector:
 	'''FeedbackCollector handles collection of GPIO events and sending them to queue.
@@ -76,26 +86,37 @@ class FeedbackCollector:
 		Returns:
 			(list of Event tuples) Current room schedule
 		'''
-		gSchedule = self.gsheet.worksheet(self.config['schedule_sheet']).get_all_records()
+		gSchedule = self.gsheet.worksheet(self.config['room_id']).get_all_records()
 
 		# save a local copy of the worksheet to filesystem.
 		# Mainly, just so somebody has all the event information locally if needed after the event.
 		with open(LOCAL_GSHEET_PAGE_CACHE, 'w') as f_out:
 			json.dump(gSchedule, f_out)
 
+		# Build a schedule from the appropriate Google Sheets page data.
 		schedule = []
 		for row in gSchedule:
+			# Convert date, time to real datetime objects for the start and end of the 
+			# events.
+			dt_string = '{0}-2018 {1}'.format(
+				row[SHEET_COL_HDG_EVENT_DATE], 
+				row[SHEET_COL_HDG_EVENT_TIME])
+			start_datetime = datetime.strptime(dt_string, '%m-%d-%Y %H:%M') 
+			end_datetime = start_datetime + timedelta(seconds=(60 * (SESSION_MIN + BREAK_MIN)))
+
 			event = Event(id=row[SHEET_COL_HDG_EVENT_ID], 
 				room=row[SHEET_COL_HDG_EVENT_ROOM], 
-				date=row[SHEET_COL_HDG_EVENT_DATE], 
-				time=row[SHEET_COL_HDG_EVENT_TIME])
-			if( event.room == self.config['room_id']):
-				# Found event that matches with this device's configuration, add to schedule
-				logger.debug('''Adding event to schedule: id {0} in {1} on {2} @ {3}'''
-					.format(event.id, event.room, event.date, event.time))
-				schedule.append(event)
+				start_datetime=start_datetime,
+				end_datetime=end_datetime)
+
+			logger.debug('''Adding event to schedule: id {0} in {1} start: {2} end: {3}'''
+				.format(event.id, event.room, event.start_datetime, event.end_datetime))
+			schedule.append(event)
 
 		return schedule
+
+	def getSchedule(self):
+		return self.roomSchedule
 
 	def validateSchedule(self, logger):
 		'''Sanity checks on room schedule / list of events
@@ -105,15 +126,11 @@ class FeedbackCollector:
 
 		Note: Validation fails/passes silently. Only logs the details.
 
-		Note 2: In the event of failed validation of Google Sheet schedule, 
-		will attempt to load schedule from schedule_cache.json in local filesystem.
-
 		Args:
 			s: (list) Room scheduled event list
 			logger: (logger) The logger to write results to
 		'''
 		cnt = len(self.roomSchedule)
-		loadFromCache = False
 		if(cnt):
 			logger.debug('Validating {0} events in room\'s schedule.'.format(cnt))
 			for i in xrange(0, cnt-1):
@@ -121,112 +138,50 @@ class FeedbackCollector:
 				for j in xrange(i+1, cnt):
 					e2 = self.roomSchedule[j] # Some other event in the schedule
 					
-					if e1.date == e2.date and e1.time == e2.time:
+					if e1.start_datetime == e2.start_datetime:
 						logger.degug('''Event schedule FAILS VAILIDATION. Duplicate 
 							date or time found in schedule.''')
-						loadFromCache = True
 		else:
 			logger.debug('Event schedule is empty.')
-			loadFromCache = True
 
-		if not loadFromCache:	
-			logger.info('Successfully validated {0} events for roomID: \'{1}\' schedule.'
-				.format(cnt, self.config['room_id']))
+		logger.info('Successfully validated {0} events for roomID: \'{1}\' schedule.'
+			.format(cnt, self.config['room_id']))
 
-			# Had successful validation, update any cached copy with this one.	
-			logger.debug('Caching copy of validated schedule to local filesystem.')
-			schedule = {}
-			schedule['configuration'] = self.config
-			event_ids, rooms, dates, times = [], [], [], []
-			for i in range(len(self.roomSchedule)):
-				event_ids.append(self.roomSchedule[i].id)
-				rooms.append(self.roomSchedule[i].room)
-				dates.append(self.roomSchedule[i].date)
-				times.append(self.roomSchedule[i].time)
-			events = [{SHEET_COL_HDG_EVENT_ID: i, SHEET_COL_HDG_EVENT_ROOM: r,
-				SHEET_COL_HDG_EVENT_DATE: d, SHEET_COL_HDG_EVENT_TIME:t} for i,r,d,t in 
-				zip(event_ids, rooms, dates, times)]
-			schedule['events'] = json.dumps(literal_eval(str(events)))
-			with open(LOCAL_SCHEDULE_CACHE_FILE, 'w') as f_out:
-				json.dump(schedule, f_out)
-			return
-		
-		# If here, need to try to read cached copy of schedule from file system
-		# Assumes that any schedule that got saved previously must have passed
-		# validation to get there in the first place.
-		logger.debug("Updating roomSchedule with cached schedule from file system.")	
-		logger.debug("(local schedule_cache.json assumed to be good.)")
-		with open(LOCAL_SCHEDULE_CACHE_FILE, 'r') as f_in:
-				self.roomSchedule = json.load(f_in)
-				# TODO: This could still stand additional robustness, but think it 
-				# is good enough for now.
-
-	def collectFeedback(self):
-		'''Perform the feedback collection activity.
-
-		Note: Once started, loops infinitely doing the following:
-		 * Based on current time, decide what event we are logging
-		 * Listen for GPIO / Button input
-		 * When button press is detected, write a new vote to the queue.
+	def votePositive(self):
 		'''
-		self.logger.info('FeedbackCollector.collectFeedback() loop started.')
-		base_datetime = datetime.now()
-		while True:
-			cur_datetime = datetime.now()
-			record = {}
+		GPIO callback function for positive vote button press
+		'''
+		record = {}
+		record['Vote'] = POSITIVE_VOTE
+		record['Timestamp'] = datetime.now()
 
-			if self.config['simulate_voting'] in ['True', 'TRUE']:
-				# Simulate Feedback as crude testing
-				delta = (cur_datetime - base_datetime)
-				if delta.seconds >= 3:
-					# Simulator will make a random vote every 3 seconds
-					# Update start_datetime to current time
-					base_datetime = cur_datetime
-					vote = random.choice(vote_options)
-					record[SHEET_COL_HDG_EVENT_ROOM] = self.config['room_id']
-					record['Timestamp'] = str(cur_datetime)
-					record['Vote'] = vote
+		# Add the record to the multiprocessing queue for the feedback writer
+		self.queue.put(record)
+		self.logger.info("VOTE record added to queue: {0}".format(record))
 
-					# Add the record to the multiprocessing queue for the feedback writer
-					self.logger.info("SIMULATION: collected feedback record: \n{0}".format(record))
-					self.queue.put(record)
-					self.logger.info("SIMULATION: wrote feedback record to queue.")
-				
-				continue # the infinite main loop here if we are simulating votes
+	def voteNegative(self):
+		'''
+		GPIO callback function for negative vote button press
+		'''
+		record = {}
+		record['Vote'] = NEGATIVE_VOTE
+		record['Timestamp'] = datetime.now()
 
-			# if here, we are not simulating data - GPIO input actually happening				
+		# Add the record to the multiprocessing queue for the feedback writer
+		self.queue.put(record)
+		self.logger.info("VOTE record added to queue: {0}".format(record))
 
-			#input_state18 = GPIO.input(18)
-			#input_state13 = GPIO.input(13)
-			#input_state6 = GPIO.input(6)
-			input_state18 = True;
-			input_state13 = False;
-			input_state6 = False;
-			vote = 'None'
-			if input_state18 == False:
-				vote = vote_options[0]  # Positive feedback
-			elif input_state13 == False:
-				vote = vote_options[1]  # Negative feedback
-			elif input_state6 == False:
-				vote = vote_options[2]  # Neutral feedback
+	def voteNeutral(self):
+		'''
+		GPIO callback function for negative vote button press
+		'''
+		record = {}
+		record['Vote'] = NEUTRAL_VOTE
+		record['Timestamp'] = datetime.now()
 
-			if vote != 'None':
-				record[SHEET_COL_HDG_EVENT_ROOM] = self.config['room_id']
-				record['Timestamp'] = str(cur_datetime)
-				record['Vote'] = vote
-
-				# Add the record to the multiprocessing queue for the feedback writer
-				self.logger.info("FEEDBACK ACQUIRED: collected feedback record: \n{0}".format(record))
-				self.queue.put(record)
-				self.logger.info("FEEDBACK ACQUIRED: wrote feedback record to queue.")
-
-			time.sleep(1) #seconds  ( 1 seems too long for "live" device, experiment if needed )
-
-
-			# Lookup what event in schedule
-
-			# Collect feedback here
-
+		# Add the record to the multiprocessing queue for the feedback writer
+		self.queue.put(record)
+		self.logger.info("VOTE record added to queue: {0}".format(record))
 
 	def __init__(self, queue, logger):
 		'''Instantiate new FeedbackCollector Object
@@ -276,7 +231,6 @@ class FeedbackWriter:
 		with open(filename) as f:
 			return json.load(f)
 
-
 	def writeFeedback(self):
 		self.logger.info('FeedbackWriter.writeFeedback() loop started')
 		rows = []
@@ -325,7 +279,7 @@ class FeedbackWriter:
 				self.worksheet.append_row(sheet_row, 2)
 
 
-	def __init__(self, queue, logger):
+	def __init__(self, queue, logger, schedule):
 		'''Instantiate new FeedbackWriter Object
 
 		Args:
@@ -339,6 +293,8 @@ class FeedbackWriter:
 		self.worksheet = self.gsheet.worksheet(self.config['room_id'])
 		self.queue = queue
 		self.logger = logger
+		self.schedule = schedule
+
 
 		# Log file for each day - will be appended to throughout.
 		currenttime = datetime.now().strftime('%m_%d')
@@ -385,44 +341,7 @@ def googlesheetlookup():
 	talkID = worksheet.acell("""A""" + str(cell.row) + """ """).value
 	print "Talk ID = ", talkID
 	updater(talkID)
-
-def input():
-	while True:
-		#input_state18 = GPIO.input(18)
-		#input_state13 = GPIO.input(13)
-		#input_state6 = GPIO.input(6)
-		input_state18 = True;
-		input_state13 = False;
-		input_state6 = False;
-		if input_state18 == False:
-			vote = "pos"
-		if input_state13 == False:
-			vote = "neg"
-		if input_state6 == False:
-			vote = "neutral"
-		queue.put(vote)
-		time.sleep(1)#seconds
 	
-def updater():
-	def update(stop):
-		while not stop.is_set():
-			try:
-				for _ in range(0, queue.qsize()):
-					vote = queue.get_nowait()
-					if vote is "pos":
-							updatepos()
-					if vote is "neg":
-							updateneg()
-					if vote is "neutral":
-							updateneutral()
-					time.sleep(1) # seconds
-			except Queue.Empty: pass
-			except KeyboardInterrupt: pass
-	stop = multiprocessing.Event()
-	multiprocessing.Process(target=update, args=[stop]).start()
-	return stop
-
-
 def updatepos(talkID):
 	cell = worksheet.find(talkID)
 	value = worksheet.acell("""I""" + str(cell.row) + """ """).value
@@ -443,7 +362,10 @@ def updateneutral():
 	newvalue = int(value) + 1
 	worksheet.update_acell("""H""" + str(cell.row) + """ """, """ """ + str(newvalue) + """ """)
 
-if __name__ == "__main__":
+
+
+
+def main():
 	# Set up for a file log, since this will be headless
 	logging.basicConfig(level=logging.DEBUG,
 		format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
@@ -459,18 +381,38 @@ if __name__ == "__main__":
 	# Instantiate our collector
 	collector = FeedbackCollector(queue, logger)
 	logger.info('FeedbackCollector object instantiated.')
-	logger.debug('FeedbackCollector: %s' % str(collector))
-
-	#Instantiate our writer
-	writer = FeedbackWriter(queue, logger)
+	logger.debug('FeedbackCollector: %s' % str(collector)) #Instantiate our writer
+	writer = FeedbackWriter(queue, logger, collector.getSchedule())
 	logger.info('FeedbackWriter object instantiated.')
 
-	collectorProcess = multiprocessing.Process(target=collector.collectFeedback)
-	collectorProcess.start()
+	# Zach - SETUP GPIO HERE
+	# GPIO.setup(POSITIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+	# GPIO.setup(NEGATIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+	# GPIO.setup(NEUTRAL_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+	# May need glitch filter here
+
+	# Add our callback function to GPIO pin event interrupts
+	# GPIO.add_event_detect(POSITIVE_PIN, GPIO.FALLING, callback = writer.votePositive)
+	# GPIO.add_event_detect(NEGATIVE_PIN, GPIO.FALLING, callback = writer.voteNegative)
+	# GPIO.add_event_detect(NEUTRAL_PIN, GPIO.FALLING, callback = writer.voteNeutral)
+
+	# ! THIS SECTION CAN STAY COMMENTED OUT FOR NOW !! #
+	# Pretty certain that using callbacks now there is no need to have a dedicated collector
+	# process
+	# collectorProcess = multiprocessing.Process(target=collector.collectFeedback)
+	# collectorProcess.start()
+
+	# Start the writer
 	writerProcess = multiprocessing.Process(target=writer.writeFeedback)
 	writerProcess.start()
 
-
-	collectorProcess.join()
+	# Don't stop the main process until child process finish, which should be never.	
+	# collectorProcess.join()
 	writerProcess.join()
+
+if __name__ == "__main__":
+	main()
+
+
 

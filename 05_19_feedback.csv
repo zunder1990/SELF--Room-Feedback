@@ -1,0 +1,12 @@
+Timestamp,EventID,Room,Feedback
+2018-05-19 12:08:51.163182,EventFoo,BallroomA,Negative
+2018-05-19 12:08:54.165225,EventFoo,BallroomA,Positive
+2018-05-19 12:08:57.165226,EventFoo,BallroomA,Neutral
+2018-05-19 12:09:00.165689,EventFoo,BallroomA,Neutral
+2018-05-19 12:09:03.165693,EventFoo,BallroomA,Neutral
+2018-05-19 12:09:06.165693,EventFoo,BallroomA,Negative
+2018-05-19 12:09:09.165872,EventFoo,BallroomA,Negative
+2018-05-19 12:09:12.165873,EventFoo,BallroomA,Negative
+2018-05-19 12:09:15.172031,EventFoo,BallroomA,Negative
+2018-05-19 12:09:18.172041,EventFoo,BallroomA,Neutral
+2018-05-19 12:09:21.179445,EventFoo,BallroomA,Negative
