@@ -221,6 +221,18 @@ class FeedbackCollector:
 
 		# Results of schedule validation will be written to log only
 		self.validateSchedule(logger)
+		
+		# Zach - SETUP GPIO HERE - MOVED !
+		# GPIO.setup(POSITIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+		# GPIO.setup(NEGATIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+		# GPIO.setup(NEUTRAL_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+		# May need glitch filter here
+
+		# Add our callback function to GPIO pin event interrupts
+		# GPIO.add_event_detect(POSITIVE_PIN, GPIO.FALLING, callback = self.votePositive)
+		# GPIO.add_event_detect(NEGATIVE_PIN, GPIO.FALLING, callback = self.voteNegative)
+		# GPIO.add_event_detect(NEUTRAL_PIN, GPIO.FALLING, callback = self.voteNeutral)
 	
 	def __repr__(self):
 		# Overly verbose __repr__ because we may be headless and relying on log for debug
@@ -454,17 +466,6 @@ def main():
 	writer = FeedbackWriter(queue, logger, collector.getSchedule())
 	logger.info('FeedbackWriter object instantiated.')
 
-	# Zach - SETUP GPIO HERE
-	# GPIO.setup(POSITIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-	# GPIO.setup(NEGATIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-	# GPIO.setup(NEUTRAL_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-	# May need glitch filter here
-
-	# Add our callback function to GPIO pin event interrupts
-	# GPIO.add_event_detect(POSITIVE_PIN, GPIO.FALLING, callback = writer.votePositive)
-	# GPIO.add_event_detect(NEGATIVE_PIN, GPIO.FALLING, callback = writer.voteNegative)
-	# GPIO.add_event_detect(NEUTRAL_PIN, GPIO.FALLING, callback = writer.voteNeutral)
 
 	# ! THIS SECTION CAN STAY COMMENTED OUT FOR NOW !! #
 	# Pretty certain that using callbacks now there is no need to have a dedicated collector
