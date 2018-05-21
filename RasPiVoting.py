@@ -261,7 +261,7 @@ class FeedbackWriter:
 		self.logger.info("getEventID() found event: {0} for timestamp {1}".format(
 			event_id, timestamp))
 
-		return event_id  # TODO:  Implent logic
+		return event_id  
 
 	def writeFeedback(self):
 		self.logger.info('FeedbackWriter.writeFeedback() loop started')
