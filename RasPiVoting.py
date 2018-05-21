@@ -2,6 +2,7 @@
 from ast import literal_eval
 import csv
 import collections
+from copy import deepcopy
 import gspread
 import logging
 import json
@@ -45,6 +46,7 @@ SESSION_MIN = 90    # Zach to verify - 90 min sessions
 BREAK_MIN = 15      # Zach to verify - 15 min breaks between
 
 Event = collections.namedtuple('Event', 'id room start_datetime end_datetime')
+
 vote_options = [POSITIVE_VOTE, NEGATIVE_VOTE, NEUTRAL_VOTE]
 
 class FeedbackCollector:
@@ -183,6 +185,23 @@ class FeedbackCollector:
 		self.queue.put(record)
 		self.logger.info("VOTE record added to queue: {0}".format(record))
 
+	def simulateVoting(self):
+		'''
+		Hacky way to simulate voting if not hooked up on Pi with GPIO
+		'''
+		while(True):
+			time.sleep(1)
+			vote = random.choice(vote_options)
+			self.logger.info('SIMULATING: {0} vote.'.format(vote))
+
+			# call the GPIO callback directly
+			if vote == POSITIVE_VOTE:
+				self.votePositive()
+			elif vote == NEGATIVE_VOTE:
+				self.voteNegative()
+			else:
+				self.voteNeutral()
+
 	def __init__(self, queue, logger):
 		'''Instantiate new FeedbackCollector Object
 
@@ -231,6 +250,19 @@ class FeedbackWriter:
 		with open(filename) as f:
 			return json.load(f)
 
+	def getEventID(self, timestamp):
+		event_id = 'None'
+		for event in self.schedule:
+			if timestamp >= event.start_datetime \
+			    and timestamp <= event.end_datetime:
+
+				event_id = event.id
+
+		self.logger.info("getEventID() found event: {0} for timestamp {1}".format(
+			event_id, timestamp))
+
+		return event_id  # TODO:  Implent logic
+
 	def writeFeedback(self):
 		self.logger.info('FeedbackWriter.writeFeedback() loop started')
 		rows = []
@@ -242,6 +274,9 @@ class FeedbackWriter:
 			while self.queue.qsize() != 0:
 				feedback_list.append(self.queue.get())
 			
+			if feedback_list.count == 0:
+				continue   # Short circuit loop if no feedback
+			
 			self.logger.info('FeedbackWriter read feedback from queue:\n{0}'.format(feedback_list))
 
 			# Write (append) to local daily vote log
@@ -249,7 +284,12 @@ class FeedbackWriter:
 				writer = csv.writer(f_out, delimiter=',')
 				for r in feedback_list:	
 					# Need to get the event / lookup
-					row =[r['Timestamp'], 'EventFoo', r['Room'], r['Vote']]
+					event_id = self.getEventID(r['Timestamp'])
+					
+					if event_id == 'None':
+						continue
+
+					row =[r['Timestamp'], event_id, r['Vote']]
 					writer.writerow(row)
 
 					#self.worksheet.insert_row(row, 2)  # Busts Google API request limit quickly
@@ -262,22 +302,45 @@ class FeedbackWriter:
 			if delta.seconds >= int(self.config['update_gsheet_seconds']):
 				self.logger.info("!--> Feedback Writer - Tally for Google Sheet update.")
 				base_time = cur_time # reset timer
-				count_pos = 0
-				count_neg = 0
-				count_neutral = 0
+
+				# Make copy of initial tallys
+				init_tallies = deepcopy(self.tally_dict)
+				self.logger.info("Initial Tallies: {0}".format(str(init_tallies)))
+
+				# Add new votes to existing tally
 				with open(self.feedbackLogFile, 'r') as f_in:
 					reader = csv.reader(f_in, delimiter=',')
 					for row in reader:
-						# Vote is index 3 in csv file currently
-						if(row[3] == PIN_18_FEEDBACK ):
-							count_pos += 1
-						elif(row[3] == PIN_13_FEEDBACK):
-							count_neg += 1
-						elif(row[3] == PIN_6_FEEDBACK):
-							count_neutral += 1
-				sheet_row = [str(cur_time), count_pos, count_neg, count_neutral]
-				self.worksheet.append_row(sheet_row, 2)
+						event_id = row[1]
+						# Update the event tally counters
+						# Vote is index 2 in csv file currently
+						if(row[2] == POSITIVE_VOTE):
+							self.tally_dict[event_id]['positive'] += 1
+						elif(row[2] == NEGATIVE_VOTE):
+							self.tally_dict[event_id]['negative'] += 1
+						elif(row[2] == NEUTRAL_VOTE):
+							self.tally_dict[event_id]['neutral'] += 1
 
+				self.logger.info("Current Tallies: {0}".format(str(self.tally_dict)))
+
+				# update the google sheet anywhere the tally has changed
+				for key, value in self.tally_dict.iteritems():
+					self.logger.info('Key: {0}, Value: {1}, init_tally: {2}'.format(
+						key, str(value), str(init_tallies[key])))
+					
+					if value['positive'] != init_tallies[key]['positive'] or \
+						value['negative'] != init_tallies[key]['negative'] or \
+						value['neutral'] != init_tallies[key]['neutral']:
+						self.logger.info('Need to update Google Sheet for event: {0}'.format(key))
+						# The current tally has changed from initial tally
+						# get row in google sheet to adjust
+						cell = self.worksheet.find(key)
+						target = '{0}{1}'.format(SHEET_COL_POS_VOTE, str(cell.row))
+						self.worksheet.update_acell(target, str(value['positive']))
+						target = '{0}{1}'.format(SHEET_COL_NEG_VOTE, str(cell.row))
+						self.worksheet.update_acell(target, str(value['negative']))
+						target = '{0}{1}'.format(SHEET_COL_NEUTRAL_VOTE, str(cell.row))
+						self.worksheet.update_acell(target, str(value['neutral']))						
 
 	def __init__(self, queue, logger, schedule):
 		'''Instantiate new FeedbackWriter Object
@@ -294,7 +357,11 @@ class FeedbackWriter:
 		self.queue = queue
 		self.logger = logger
 		self.schedule = schedule
+		self.tally_dict = {}
 
+		# Initialize tally dictionary element for every event
+		for event in schedule:
+			self.tally_dict[event.id] = {'positive': 0, 'negative': 0, 'neutral': 0}
 
 		# Log file for each day - will be appended to throughout.
 		currenttime = datetime.now().strftime('%m_%d')
@@ -304,7 +371,7 @@ class FeedbackWriter:
 		if not os.path.exists(self.feedbackLogFile):
 			with open(self.feedbackLogFile, 'w') as f_out:
 				writer = csv.writer(f_out, delimiter=',')
-				writer.writerow(['Timestamp', 'EventID', 'Room', 'Feedback'])
+				writer.writerow(['Timestamp', 'EventID', 'Feedback'])
 				
 
 	def __repr__(self):
@@ -341,7 +408,10 @@ def googlesheetlookup():
 	talkID = worksheet.acell("""A""" + str(cell.row) + """ """).value
 	print "Talk ID = ", talkID
 	updater(talkID)
-	
+
+'''
+Zach's original functions - commented out for now. VS 2018.05.20
+
 def updatepos(talkID):
 	cell = worksheet.find(talkID)
 	value = worksheet.acell("""I""" + str(cell.row) + """ """).value
@@ -361,8 +431,7 @@ def updateneutral():
 	value = worksheet.acell("""H""" + str(cell.row) + """ """).value
 	newvalue = int(value) + 1
 	worksheet.update_acell("""H""" + str(cell.row) + """ """, """ """ + str(newvalue) + """ """)
-
-
+'''
 
 
 def main():
@@ -407,8 +476,15 @@ def main():
 	writerProcess = multiprocessing.Process(target=writer.writeFeedback)
 	writerProcess.start()
 
+	# Start simulating votes if needed
+	if collector.config['simulate_voting'] in ['True', 'TRUE', 'true']:
+		simulatorProcess = multiprocessing.Process(target=collector.simulateVoting)
+		simulatorProcess.start()
+
 	# Don't stop the main process until child process finish, which should be never.	
 	# collectorProcess.join()
+	if simulatorProcess:
+		simulatorProcess.join()
 	writerProcess.join()
 
 if __name__ == "__main__":

@@ -6,5 +6,5 @@
     "session_start_offset_min": "0",
     "session_end_offset_min": "15",
     "simulate_voting": "True",
-    "update_gsheet_seconds": "60"
+    "update_gsheet_seconds": "10"
 }
