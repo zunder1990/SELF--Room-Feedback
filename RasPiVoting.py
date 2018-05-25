@@ -149,7 +149,7 @@ class FeedbackCollector:
 		logger.info('Successfully validated {0} events for roomID: \'{1}\' schedule.'
 			.format(cnt, self.config['room_id']))
 
-	def votePositive(self):
+	def votePositive(self, channel):
 		'''
 		GPIO callback function for positive vote button press
 		'''
@@ -161,7 +161,7 @@ class FeedbackCollector:
 		self.queue.put(record)
 		self.logger.info("VOTE record added to queue: {0}".format(record))
 
-	def voteNegative(self):
+	def voteNegative(self, channel):
 		'''
 		GPIO callback function for negative vote button press
 		'''
@@ -173,7 +173,7 @@ class FeedbackCollector:
 		self.queue.put(record)
 		self.logger.info("VOTE record added to queue: {0}".format(record))
 
-	def voteNeutral(self):
+	def voteNeutral(self, channel):
 		'''
 		GPIO callback function for negative vote button press
 		'''
@@ -196,11 +196,11 @@ class FeedbackCollector:
 
 			# call the GPIO callback directly
 			if vote == POSITIVE_VOTE:
-				self.votePositive()
+				self.votePositive(1)
 			elif vote == NEGATIVE_VOTE:
-				self.voteNegative()
+				self.voteNegative(1)
 			else:
-				self.voteNeutral()
+				self.voteNeutral(1)
 
 	def __init__(self, queue, logger):
 		'''Instantiate new FeedbackCollector Object
@@ -318,6 +318,12 @@ class FeedbackWriter:
 				# Make copy of initial tallys
 				init_tallies = deepcopy(self.tally_dict)
 				self.logger.info("Initial Tallies: {0}".format(str(init_tallies)))
+
+				# Clear the tally dictionary prior to recount
+				for event, event_tally in self.tally_dict.items():
+					self.tally_dict[event]['positive'] = 0
+					self.tally_dict[event]['neutral'] = 0
+					self.tally_dict[event]['negative'] = 0
 
 				# Add new votes to existing tally
 				with open(self.feedbackLogFile, 'r') as f_in:
