@@ -7,7 +7,7 @@ import gspread
 import logging
 import json
 from oauth2client.service_account import ServiceAccountCredentials
-# import RPi.GPIO as GPIO            # Uncomment when on Pi
+import RPi.GPIO as GPIO            # Uncomment when on Pi
 import random
 import time
 import subprocess
@@ -39,10 +39,10 @@ NEGATIVE_VOTE = 'Negative'
 NEUTRAL_VOTE = 'Neutral'
 
 POSITIVE_PIN = 19   # Zach to verify
-NEGATIVE_PIN = 13   # Zach to verify
-NEUTRAL_PIN = 6     # Zach to verify
+NEGATIVE_PIN = 26   # Zach to verify
+NEUTRAL_PIN = 20     # Zach to verify
 
-SESSION_MIN = 90    # Zach to verify - 90 min sessions
+SESSION_MIN = 60    # Zach to verify - 60 min sessions
 BREAK_MIN = 15      # Zach to verify - 15 min breaks between
 
 Event = collections.namedtuple('Event', 'id room start_datetime end_datetime')
@@ -222,17 +222,18 @@ class FeedbackCollector:
 		# Results of schedule validation will be written to log only
 		self.validateSchedule(logger)
 		
-		# Zach - SETUP GPIO HERE - MOVED !
-		# GPIO.setup(POSITIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-		# GPIO.setup(NEGATIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-		# GPIO.setup(NEUTRAL_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+		#Zach - SETUP GPIO HERE - MOVED !
+		GPIO.setmode(GPIO.BCM)
+		GPIO.setup(POSITIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+		GPIO.setup(NEGATIVE_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+		GPIO.setup(NEUTRAL_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
 		# May need glitch filter here
 
 		# Add our callback function to GPIO pin event interrupts
-		# GPIO.add_event_detect(POSITIVE_PIN, GPIO.FALLING, callback = self.votePositive)
-		# GPIO.add_event_detect(NEGATIVE_PIN, GPIO.FALLING, callback = self.voteNegative)
-		# GPIO.add_event_detect(NEUTRAL_PIN, GPIO.FALLING, callback = self.voteNeutral)
+		GPIO.add_event_detect(POSITIVE_PIN, GPIO.FALLING, callback = self.votePositive, bouncetime=1000)
+		GPIO.add_event_detect(NEGATIVE_PIN, GPIO.FALLING, callback = self.voteNegative, bouncetime=1000)
+		GPIO.add_event_detect(NEUTRAL_PIN, GPIO.FALLING, callback = self.voteNeutral, bouncetime=1000)
 	
 	def __repr__(self):
 		# Overly verbose __repr__ because we may be headless and relying on log for debug
