@@ -40,7 +40,7 @@ NEUTRAL_VOTE = 'Neutral'
 
 POSITIVE_PIN = 19   # Zach to verify
 NEGATIVE_PIN = 26   # Zach to verify
-NEUTRAL_PIN = 20     # Zach to verify
+NEUTRAL_PIN = 20    # Zach to verify
 
 SESSION_MIN = 60    # Zach to verify - 60 min sessions
 BREAK_MIN = 15      # Zach to verify - 15 min breaks between
@@ -485,6 +485,7 @@ def main():
 	writerProcess.start()
 
 	# Start simulating votes if needed
+	simulatorProcess = None
 	if collector.config['simulate_voting'] in ['True', 'TRUE', 'true']:
 		simulatorProcess = multiprocessing.Process(target=collector.simulateVoting)
 		simulatorProcess.start()
