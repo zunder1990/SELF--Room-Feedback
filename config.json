@@ -1,0 +1,10 @@
+{
+    "no_ntp_start_time": "01:00",
+    "room_id": "BallroomA",
+    "schedule_sheet": "TEST_EVENT_SCHEDULE",
+    "session_length_min": "60",
+    "session_start_offset_min": "0",
+    "session_end_offset_min": "15",
+    "simulate_voting": "True",
+    "update_gsheet_seconds": "90"
+}
